@@ -8,7 +8,6 @@ from tools import search_pubmed, read_pdf, summarize_research
 
 def create_agent():
     llm = ChatOllama(
-#        model= "llama3-groq-tool-use",
         model= "llama3:8b",
         temperature=0
     )
