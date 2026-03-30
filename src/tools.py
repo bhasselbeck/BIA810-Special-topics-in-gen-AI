@@ -4,6 +4,7 @@ from pypdf import PdfReader
 import logging
 from typing import List
 from pubmed_utils import pubmed_search, get_pubmed_contents
+from pypaperretriever import PaperRetriever
 
 @tool
 def search_pubmed(query:str)->List[object]:
@@ -12,9 +13,11 @@ def search_pubmed(query:str)->List[object]:
     if results['status_code'] == 200:
         # we have a field 'indices' that will be one or more PubMed ID's
         contents = get_pubmed_contents(results['indices'])
-        if contents['status'] == 200:
-            docs_xml = contents['response'].content.decode()
-            return [""] # todo
+        if contents['status_code'] == 200:
+            # content_dict has the pubmedID as the key; value is the related metadata
+            content_dict = contents['contents']
+
+            return ["voodoo"] # todo
         else:
             return ["no data"]
         # todo....
@@ -27,12 +30,14 @@ def search_pubmed(query:str)->List[object]:
 def read_pdf(file_path: str) -> str:
     """Extract text from a scientific paper"""
     logging.info(f"In read_pdf with filepath: {file_path}")
-    reader = PdfReader(file_path)
+
     text = ""
-
-    for page in reader.pages:
-        text += page.extract_text()
-
+    try:
+        reader = PdfReader(file_path)
+        for page in reader.pages:
+            text += page.extract_text()
+    except FileNotFoundError as fnf:
+        logging.error(f"File not found: {file_path}")
     return text
     return lorem.paragraph()
 
@@ -40,3 +45,26 @@ def read_pdf(file_path: str) -> str:
 def summarize_research(text: str) -> str:
     """Summarize pharmaceutical research findings"""
     return f"Summary of findings\n{text[:500]}"
+
+
+# TODO: Consider splitting this paper fetching logic off into another source file, and
+# providing a better interface for retrieving....
+#@tool
+def fetch_paper_by_doi(doi: str)->object:
+    """Fetch paper using Digital Object ID (DOI)"""
+    retriever = PaperRetriever(
+        doi=doi,
+        download_directory="PDF"
+    )
+    retriever.download()
+    return "requested"
+
+#@tool
+def fetch_paper_by_pubmed_id(pmid: str)->object:
+    """Fetch paper using PubMed ID"""
+    retriever = PaperRetriever(
+        pmid=pmid,
+        download_directory="PDF"
+    )
+    retriever.download()
+    return "requested"

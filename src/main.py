@@ -3,7 +3,7 @@ from random import shuffle
 import streamlit as st
 
 app_title = "BIA810 Project"
-llm_models=['llama3:8b']
+llm_models=['llama3:8b', 'gpt-oss:latest', 'qwen3:8b']
 
 
 if "messages" not in st.session_state:
@@ -19,7 +19,7 @@ def about_box():
     st.info("Version 0.0.1",icon="ℹ️")
 
 st.set_page_config(page_title=app_title, layout='wide')
-
+st.logo(image="../images/Pfizer_Logo_White.png", size="large", link="https://www.pfizer.com")
 st.sidebar.markdown("## Main Menu")
 model = st.sidebar.selectbox("Model Name", llm_models)
 temperature = st.sidebar.slider("Temperature", min_value=0.0, max_value=2.0, value=0.0, step=0.05)

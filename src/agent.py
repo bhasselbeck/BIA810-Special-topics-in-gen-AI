@@ -3,7 +3,7 @@ from langchain_ollama import ChatOllama
 from langchain_classic import hub
 from tools import search_pubmed, read_pdf, summarize_research
 
-def create_agent(model: str, temperature: int = 0):
+def create_agent(model: str, temperature: float = 0):
     llm = ChatOllama(
         model= model,
         temperature=temperature

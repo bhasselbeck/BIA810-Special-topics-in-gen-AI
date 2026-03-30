@@ -2,8 +2,6 @@ import requests
 import xml.etree.ElementTree as ET
 from typing import List, Dict
 
-from narwhals import Object
-
 base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
 
 def pubmed_search(query: str) -> str:
@@ -25,10 +23,11 @@ def pubmed_search(query: str) -> str:
         return{ "status_code": response.status_code, "response": response.text[:1000]}
 
 
-def get_pubmed_summaries(ids: List[int]) -> List[Object]:
+def get_pubmed_summaries(ids: List[int]) -> List[object]:
     pass
 
-def get_pubmed_contents(ids: List[int]) -> Dict[str, Object]:
+def get_pubmed_contents(ids: List[int]) -> Dict[str, object]:
+    content_dict = {}
     url = base_url + "esummary.fcgi"
     params = {
         'db': 'pubmed',
@@ -36,7 +35,26 @@ def get_pubmed_contents(ids: List[int]) -> Dict[str, Object]:
     }
     response = requests.get(url=url, params=params)
     if response.status_code == 200:
-        return {"status_code": response.status_code, "response": response}
+        et = ET.fromstring(response.content.decode())
+        docs = et.findall('DocSum')
+        for summary in docs:
+            id = summary.find('Id').text
+            pmid = ''
+            doi = ''
+            try:
+                pmid = summary.find("Item[@Name='ArticleIds']/Item[@Name='pubmed']").text
+            except KeyError:
+                pass
+            try:
+                doi = summary.find("Item[@Name='ArticleIds']/Item[@Name='doi']").text
+            except KeyError:
+                pass
+
+            content_dict[id] = [{"PMID": pmid, "doi": doi}]
+            print(f"found ID: {id}")
+
+
+        return {"status_code": response.status_code, "contents": content_dict}
     else:
         return {"status_code": response.status_code, "response": response.text[:1000]}
 
