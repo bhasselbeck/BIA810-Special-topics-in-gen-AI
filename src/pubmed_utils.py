@@ -1,6 +1,9 @@
 import requests
 import xml.etree.ElementTree as ET
 from typing import List, Dict
+import logging
+
+log = logging.getLogger(__name__)
 
 base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
 
@@ -20,6 +23,7 @@ def pubmed_search(query: str) -> str:
             indices.append(id.text)
         return{ "status_code": response.status_code, "indices": indices}
     else:
+        log.error("An error occurred when calling pubmed_search: " + response[:1000])
         return{ "status_code": response.status_code, "response": response.text[:1000]}
 
 
@@ -48,21 +52,17 @@ def get_pubmed_contents(ids: List[int]) -> Dict[str, object]:
                 title = 'Untitled'
             try:
                 pmid = summary.find("Item[@Name='ArticleIds']/Item[@Name='pubmed']").text
-            except KeyError:
+            except:
                 pass
             try:
                 doi = summary.find("Item[@Name='ArticleIds']/Item[@Name='doi']").text
-            except KeyError:
+            except:
                 pass
-
             content_dict[id] = [{"title": title, "PMID": pmid, "doi": doi}]
-
-
-
         return {"status_code": response.status_code, "contents": content_dict}
     else:
+        log.error("An error occurred when calling get_pubmed_contents: " + response[:1000])
         return {"status_code": response.status_code, "response": response.text[:1000]}
-
 
 if __name__ == '__main__':
     response = pubmed_search("The usage of mRNA vaccines for influenza")
