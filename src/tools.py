@@ -5,6 +5,12 @@ import logging
 from typing import List
 from pubmed_utils import pubmed_search, get_pubmed_contents
 from pypaperretriever import PaperRetriever
+import os
+import string
+import random
+from fpdf import FPDF
+
+log = logging.getLogger(__name__)
 
 @tool
 def search_pubmed(query:str)->List[object]:
@@ -16,7 +22,6 @@ def search_pubmed(query:str)->List[object]:
         if contents['status_code'] == 200:
             # content_dict has the pubmedID as the key; value is the related metadata
             content_dict = contents['contents']
-
             return content_dict
         else:
             return ["no data"]
@@ -36,14 +41,14 @@ def read_pdf(pmid:str = None, doi:str = None) -> str:
         raise RuntimeError("Missing parameters")
     if doi is not None:
         content = fetch_paper_by_doi(doi=doi)
-
     if pmid is not None:
         content = fetch_paper_by_pubmed_id(pmid=pmid)
     text = ""
     try:
-        reader = PdfReader(content)
-        for page in reader.pages:
-            text += page.extract_text()
+        if content:
+            reader = PdfReader(content)
+            for page in reader.pages:
+                text += page.extract_text()
     except FileNotFoundError as fnf:
         logging.error(f"File not found: ")
     return text
@@ -51,32 +56,55 @@ def read_pdf(pmid:str = None, doi:str = None) -> str:
 
 @tool
 def summarize_research(text: str) -> str:
-    """Summarize pharmaceutical research findings"""
-    return f"Summary of findings\n{text[:500]}"
+    """Summarize pharmaceutical research findings and output as a PDF file. The function takes text content that is
+     output into the pdf."""
+    filename = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+    filename = f"{filename}.pdf"
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.write(text=text)
+#    pdf.cell(200, 10, txt=text, ln=True, align='C')
+    pdf.output(filename)
+    return f"Wrote pdf file {filename}"
 
-
-# TODO: Consider splitting this paper fetching logic off into another source file, and
-# providing a better interface for retrieving....
 #@tool
 def fetch_paper_by_doi(doi: str)->object:
     """Fetch paper using Digital Object ID (DOI)"""
+    print(f"fetch_paper_by_doi: doi = {doi}")
+    filename = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+
+    if doi.startswith("None"):
+        return ""
     retriever = PaperRetriever(
         email='test@mail.com',
         doi=doi,
         download_directory="PDF",
+        filename=f"{filename}.pdf",
         allow_scihub=True
     )
-    retriever.download()
-    return "requested"
+    download = retriever.download()
+    return os.path.join(download.filepath, download.filename)
 
 #@tool
 def fetch_paper_by_pubmed_id(pmid: str)->object:
     """Fetch paper using PubMed ID"""
+    print(f"fetch_paper_by_pubmed_id: pmid = {pmid}")
+    filename = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+
+    if pmid.startswith("None"):
+        return ""
     retriever = PaperRetriever(
         email='test@mail.com',
         pmid=pmid,
         download_directory="PDF",
+        filename=f"{filename}.pdf",
         allow_scihub=True
     )
-    retriever.download()
-    return "requested"
+    download = retriever.download()
+    if download.is_downloaded:
+        with open(os.path.join(download.filepath, download.filename), 'rb') as f:
+            contents = f.read()
+            return contents
+    else:
+        log.warning(f"fetch_paper_by_pubmed_id - failed to download pmid {pmid}")

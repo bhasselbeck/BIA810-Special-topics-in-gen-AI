@@ -106,6 +106,8 @@ def encode_doi(doi: str) -> str:
         str: URL-encoded DOI suitable for use in file paths.
     """
     # Strip quotes first, before encoding
+    if doi is None:
+        return ""
     doi = doi.strip("'\"")
     doi = doi.split("doi.org/")[-1].split("?")[0]
     # First use urllib.parse.quote to encode most special characters
