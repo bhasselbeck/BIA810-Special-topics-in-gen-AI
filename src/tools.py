@@ -108,3 +108,4 @@ def fetch_paper_by_pubmed_id(pmid: str)->object:
             return contents
     else:
         log.warning(f"fetch_paper_by_pubmed_id - failed to download pmid {pmid}")
+
