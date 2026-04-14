@@ -52,6 +52,9 @@ def _check_status(model: str) -> dict:
     except Exception:
         pass
     return {"online": False, "model_ok": False, "label": "LLM Offline", "sub": "Cannot reach Ollama on localhost:11434"}
+
+
+def _display_citations(citations: list[str]) -> None:
     if not citations:
         return
     st.markdown("### Sources & Citations")
