@@ -64,7 +64,16 @@ def get_pubmed_contents(ids: List[int]) -> Dict[str, object]:
                 doi = summary.find("Item[@Name='ArticleIds']/Item[@Name='doi']").text
             except:
                 pass
-            content_dict[id] = [{"title": title, "PMID": pmid, "doi": doi}]
+            try:
+                authorList = []
+                authorListElem = summary.find("Item[@Name='AuthorList']")
+                if authorListElem is not None:
+                    authors = authorListElem.findall("Item")
+                    for author in authors:
+                        authorList.append(author.text)
+            except:
+                pass
+            content_dict[id] = [{"title": title, "PMID": pmid, "doi": doi, "authors": authorList}]
         return {"status_code": response.status_code, "contents": content_dict}
     else:
         log.error("An error occurred when calling get_pubmed_contents: " + response[:1000])
