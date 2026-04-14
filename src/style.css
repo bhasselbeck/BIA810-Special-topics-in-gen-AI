@@ -391,3 +391,7 @@ div[data-testid="column"]:nth-child(2) .stButton > button:active {
 .stExpander summary span span[color="inherit"] {
     display:none;
 }
+
+div.stButton button {
+    background-color: rgba(0,175,240,0.25);
+} 
