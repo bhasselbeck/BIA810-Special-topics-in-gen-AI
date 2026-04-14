@@ -1,176 +1,257 @@
-from langchain_classic.tools import tool
-import lorem
-from pypdf import PdfReader
-import logging
-from typing import List
-from pubmed_utils import pubmed_search, get_pubmed_contents
-from pypaperretriever import PaperRetriever
-import os
-import string
-import random
-from fpdf import FPDF
+from __future__ import annotations
+
 import datetime
-import streamlit as st
 import json
+import logging
+import random
+import string
+from dataclasses import dataclass
+from pathlib import Path
+from typing import List
+
+import streamlit as st
+from fpdf import FPDF
+from langchain_classic.tools import tool
+from langchain_ollama import ChatOllama
+from langchain_core.messages import HumanMessage
+from pubmed_utils import pubmed_search, get_pubmed_contents
+from pypdf import PdfReader
+from pypaperretriever import PaperRetriever
 
 log = logging.getLogger(__name__)
 
-references = []
+# Absolute paths anchored to this file — immune to working-directory changes
+_SRC_DIR     = Path(__file__).parent.resolve()
+_REPO_ROOT   = _SRC_DIR.parent.resolve()
+_PDF_DIR     = _SRC_DIR / "PDF"
+_RESULTS_DIR = _SRC_DIR / "results"
+_LOGO_PATH   = _REPO_ROOT / "images" / "Pfizer_Logo.png"
 
-@tool
-def search_pubmed(query:str)->List[object]:
-    """Search research papers related to a pharmaceutical query. The query will return a title, a pmid and a doi"""
-    results = pubmed_search(query)
-    if results['status_code'] == 200:
-        # we have a field 'indices' that will be one or more PubMed ID's
-        contents = get_pubmed_contents(results['indices'])
-        if contents['status_code'] == 200:
-            # content_dict has the pubmedID as the key; value is the related metadata
-            content_dict = contents['contents']
-            return content_dict
-        else:
-            return ["no data"]
-    else:
-        logging.error("Failed to fetch query results from PubMed")
-        return ""
+references: list = []
+
+# Injected by create_agent so tools can use the same LLM for summarisation
+_llm: ChatOllama | None = None
 
 
-@tool
-def read_pdf(pmid:str = None, doi:str = None) -> str:
-    """Extract text from a scientific paper. We can use either PMID or DOI"""
-    logging.info(f"In read_pdf with pmid: '{pmid}' doi: '{doi}'")
-    content = None
-    if pmid is None and doi is None:
-        logging.error("read_pdf call with no parameters")
-        raise RuntimeError("Missing parameters")
-    if doi is not None:
-        content = fetch_paper_by_doi(doi=doi)
-    if pmid is not None:
-        content = fetch_paper_by_pubmed_id(pmid=pmid)
-    text = ""
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _unique_stem() -> str:
+    ts   = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+    rand = "".join(random.choices(string.ascii_uppercase + string.digits, k=8))
+    return f"{ts}_{rand}"
+
+
+def _resolve_download_path(download) -> Path | None:
+    """Resolve the full path of a downloaded file from a PaperRetriever object."""
+    if not download.is_downloaded:
+        return None
+
+    filepath = Path(download.filepath) if download.filepath else None
+    filename = Path(download.filename) if download.filename else None
+
+    if filepath and filepath.is_file():
+        return filepath
+    if filepath and filename:
+        candidate = filepath / filename.name
+        if candidate.exists():
+            return candidate
+    if filename and filename.exists():
+        return filename
+    if filename:
+        candidate = _PDF_DIR / filename.name
+        if candidate.exists():
+            return candidate
+
+    log.error(f"Could not resolve download path: filepath={download.filepath!r}, filename={download.filename!r}")
+    return None
+
+
+def _summarise_for_question(full_text: str, question: str) -> str:
+    """Use the LLM to compress a full paper into a focused summary.
+
+    This is the key step that lets the agent work with complete paper content
+    without blowing up the ReAct scratchpad context window.
+    """
+    if _llm is None:
+        # Fallback: return first 4000 chars if no LLM is wired up yet
+        return full_text[:4000]
+
+    prompt = (
+        f"You are a biomedical research assistant. "
+        f"A researcher asked: \"{question}\"\n\n"
+        f"Below is the full text of a scientific paper. "
+        f"Write a concise summary (300-500 words) that captures everything relevant to answering the question. "
+        f"Include key findings, methods, conclusions, and any statistics. "
+        f"Do not add commentary, licensing notes, or offers to help.\n\n"
+        f"PAPER TEXT:\n{full_text}"
+    )
     try:
-        if content:
-            reader = PdfReader(content)
-            for page in reader.pages:
-                text += page.extract_text() or ""
-    except FileNotFoundError:
-        logging.error(f"PDF file not found at path: {content}")
-    except Exception as e:
-        logging.error(f"Error reading PDF at {content}: {e}")
-    return text
+        response = _llm.invoke([HumanMessage(content=prompt)])
+        return response.content.strip()
+    except Exception as exc:
+        log.warning(f"_summarise_for_question failed: {exc} — returning raw excerpt")
+        return full_text[:4000]
+
+
+# ── Tools ─────────────────────────────────────────────────────────────────────
+
+@tool
+def search_pubmed(query: str) -> List[object]:
+    """Search research papers related to a pharmaceutical query.
+    Returns a dict keyed by PMID; each value contains title, PMID and DOI."""
+    results = pubmed_search(query)
+    if results["status_code"] == 200:
+        contents = get_pubmed_contents(results["indices"])
+        if contents["status_code"] == 200:
+            return contents["contents"]
+        return ["no data"]
+    log.error("Failed to fetch query results from PubMed")
+    return []
+
+
+@tool
+def read_pdf(pmid: str = None, doi: str = None) -> str:
+    """Download and extract a scientific paper by PMID or DOI.
+    Returns a focused summary of the paper relevant to the current research question,
+    or an ERROR: string if the paper could not be retrieved."""
+    log.info(f"read_pdf called — pmid={pmid!r}  doi={doi!r}")
+
+    if pmid is None and doi is None:
+        return "ERROR: read_pdf requires either a pmid or doi argument."
+
+    pdf_path: Path | None = None
+    if doi:
+        pdf_path = fetch_paper_by_doi(doi)
+    if pmid and pdf_path is None:
+        pdf_path = fetch_paper_by_pubmed_id(pmid)
+
+    if not pdf_path or not pdf_path.exists():
+        return f"ERROR: Could not download PDF for pmid={pmid!r} doi={doi!r}. Do not summarise this paper."
+
+    log.info(f"read_pdf: extracting text from {pdf_path}")
+    try:
+        reader = PdfReader(str(pdf_path))
+        full_text = "\n".join(page.extract_text() or "" for page in reader.pages).strip()
+    except Exception as exc:
+        log.error(f"read_pdf: failed to parse {pdf_path}: {exc}")
+        return f"ERROR: Could not parse PDF ({exc}). Do not summarise this paper."
+
+    if not full_text:
+        return f"ERROR: PDF at {pdf_path} contained no extractable text."
+
+    log.info(f"read_pdf: extracted {len(full_text)} chars, summarising for question context")
+    question = st.session_state.get("question", "")
+    return _summarise_for_question(full_text, question)
+
+
 
 @tool
 def summarize_research(text: str) -> str:
-    """Summarize pharmaceutical research findings and output as a PDF file. The function takes text content that is
-     output into the pdf, and the references are taken from the references global."""
-    filename = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
-    timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-    filename = f"{timestamp}_{filename}.pdf"
+    """Summarize pharmaceutical research findings and write a PDF report.
+
+    The text argument should be the research content to summarise.
+    Returns the path of the generated PDF, or an error string.
+    """
+    _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    out_path = _RESULTS_DIR / f"{_unique_stem()}.pdf"
+
     pdf = FPDF()
     pdf.add_page()
-    # Logo
-    pdf.image("../images/Pfizer_Logo.png", w=40, keep_aspect_ratio=True)
-    pdf.set_font("Times", size=12 )
+
+    # Logo — skip gracefully if the asset is missing
+    if _LOGO_PATH.exists():
+        pdf.image(str(_LOGO_PATH), w=40, keep_aspect_ratio=True)
+    else:
+        log.warning(f"summarize_research: logo not found at {_LOGO_PATH}, skipping.")
 
     # Question
-    if 'question' in st.session_state:
-        question = st.session_state.question
+    question = st.session_state.get("question", "(question not recorded)")
     pdf.set_x(10)
-    pdf.set_font("Helvetica", style='B', size=16)
-    pdf.multi_cell(0, 10, align='L', text='Entered Question')
+    pdf.set_font("Helvetica", style="B", size=16)
+    pdf.multi_cell(0, 10, align="L", text="Entered Question")
     pdf.set_x(10)
     pdf.set_font("Times", size=12)
     pdf.multi_cell(0, 5, text=question)
 
     # Discussion
     pdf.set_x(10)
-    pdf.set_font("Helvetica", style='B', size=16)
-    pdf.multi_cell(0, 10, align='L', text='Discussion')
+    pdf.set_font("Helvetica", style="B", size=16)
+    pdf.multi_cell(0, 10, align="L", text="Discussion")
     pdf.set_x(10)
     pdf.set_font("Times", size=12)
     pdf.multi_cell(0, 5, text=text)
 
     # References
     pdf.set_x(10)
-    pdf.set_font("Helvetica", style='B', size=16)
-    pdf.multi_cell(0, 10, align='L', text='References')
+    pdf.set_font("Helvetica", style="B", size=16)
+    pdf.multi_cell(0, 10, align="L", text="References")
     pdf.set_x(10)
     pdf.set_font("Times", size=12)
-    references_text = ""
-    for reference in references:
-        # references_text = (f"{references_text}\n,{reference.identifier} {reference.name}")
-        new_references_text = ""
-        for k, v in reference.items():
-            new_references_text = f"{new_references_text}\n{k}: {v}"
-        references_text = f"{new_references_text}\n\n"
-    if references_text == "":
-        references_text = "References not listed out"
-    pdf.multi_cell(0, 5, text=references_text)
+    if references:
+        refs_text = ""
+        for ref in references:
+            entry = "\n".join(f"{k}: {v}" for k, v in ref.items()) if isinstance(ref, dict) else str(ref)
+            refs_text += entry + "\n\n"
+    else:
+        refs_text = "References not listed."
+    pdf.multi_cell(0, 5, text=refs_text)
 
     # Disclaimer
-    disclaimer = """This generated output is strictly for educational purposes only and it produces does not constitute medical advice nor should it be construed as viable scientific research. Always consult a qualified healthcare professional before starting, changing, or stopping any treatment. Homeopathic, supplemental and alternative therapies should be discussed with your physician."""
     pdf.set_x(10)
-    pdf.set_font("Helvetica", style='B', size=16)
-    pdf.set_text_color(255,0,0)
-    pdf.multi_cell(0, 10, align='L', text='Important Disclaimer')
+    pdf.set_font("Helvetica", style="B", size=16)
+    pdf.set_text_color(255, 0, 0)
+    pdf.multi_cell(0, 10, align="L", text="Important Disclaimer")
     pdf.set_text_color(0, 0, 0)
     pdf.set_x(10)
     pdf.set_font("Times", size=12)
-    pdf.multi_cell(0, 5, text=disclaimer)
+    pdf.multi_cell(0, 5, text=(
+        "This generated output is strictly for educational purposes only and does not "
+        "constitute medical advice nor should it be construed as viable scientific research. "
+        "Always consult a qualified healthcare professional before starting, changing, or "
+        "stopping any treatment."
+    ))
+
+    pdf.output(str(out_path))
+    log.info(f"summarize_research: wrote report to {out_path}")
+    return f"Report written to {out_path}"
 
 
-    pdf.output(f"results/{filename}")
-    return f"Wrote pdf file {filename}"
+# ── Internal download helpers (not exposed as agent tools) ────────────────────
 
-#@tool
-def fetch_paper_by_doi(doi: str) -> object:
-    """Fetch paper using Digital Object ID (DOI)"""
+def fetch_paper_by_doi(doi: str) -> Path | None:
+    """Download a paper by DOI. Returns the resolved Path or None on failure."""
     doi = str(doi).strip().strip('"').strip("'")
     if not doi or doi.lower() == "none":
-        log.error("fetch_paper_by_doi called with empty/None doi")
-        return ""
-    log.info(f"fetch_paper_by_doi: doi = {doi}")
-    filename = f"{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}_{''.join(random.choices(string.ascii_uppercase + string.digits, k=8))}"
+        log.error("fetch_paper_by_doi: called with empty/None doi")
+        return None
+
+    log.info(f"fetch_paper_by_doi: doi={doi}")
+    _PDF_DIR.mkdir(parents=True, exist_ok=True)
+
     retriever = PaperRetriever(
-        email='test@mail.com',
+        email="test@mail.com",
         doi=doi,
-        download_directory="PDF",
-        filename=f"{filename}.pdf",
-        allow_scihub=True
+        download_directory=str(_PDF_DIR),
+        filename=f"{_unique_stem()}.pdf",
+        allow_scihub=True,
     )
     download = retriever.download()
-    return os.path.join(download.filepath, download.filename)
+    path = _resolve_download_path(download)
+    if path is None:
+        log.warning(f"fetch_paper_by_doi: download failed for doi={doi}")
+    return path
 
-from dataclasses import  dataclass
-@dataclass()
-class ReferenceInfo:
-    identifier: str
-    name: str
-    authors: List[str]
 
-@tool
-def store_reference_information(referenceInfo: object):
-    """This function will store a document reference. The document reference will have an identifier and a document
-    name. The document reference will have a list of one or more authors."""
-    references.append(referenceInfo)
-    # try:
-    #     references[referenceInfo.identifier] = {
-    #         "identifier": referenceInfo.identifier,
-    #         "name": referenceInfo.name,
-    #         "authors": referenceInfo.authors
-    #     }
-    # except KeyError:
-    #     log.error(f"Key error in store_reference_information. Received: {referenceInfo}")
+def fetch_paper_by_pubmed_id(pmid: object) -> Path | None:
+    """Download a paper by PMID. Returns the resolved Path or None on failure.
 
-#@tool
-def fetch_paper_by_pubmed_id(pmid: object) -> object:
-    """Fetch paper using PubMed ID. Accepts a plain PMID string, or a JSON object with a 'pmid' or 'doi' key."""
-    pm_id = None
-
-    # Normalise: strip whitespace and quotes the agent sometimes wraps around values
+    Accepts a plain PMID string or a JSON object with 'pmid'/'doi' keys.
+    """
     raw = str(pmid).strip().strip('"').strip("'")
 
-    # Try JSON first (agent occasionally passes {"pmid": "..."})
+    # Handle JSON input from the agent
+    pm_id: str | None = None
     if raw.startswith("{"):
         try:
             parsed = json.loads(raw)
@@ -182,29 +263,41 @@ def fetch_paper_by_pubmed_id(pmid: object) -> object:
         except (json.JSONDecodeError, AttributeError):
             pass
 
-    # Fall back to treating the raw value as a plain PMID
     if pm_id is None:
         pm_id = raw
 
     if not pm_id or pm_id.lower() == "none":
-        log.error(f"fetch_paper_by_pubmed_id: could not resolve a PMID from input: {pmid!r}")
-        return ""
+        log.error(f"fetch_paper_by_pubmed_id: cannot resolve PMID from {pmid!r}")
+        return None
 
-    log.info(f"fetch_paper_by_pubmed_id: pmid = {pm_id}")
-    timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-    filename = f"{timestamp}_{''.join(random.choices(string.ascii_uppercase + string.digits, k=8))}"
+    log.info(f"fetch_paper_by_pubmed_id: pmid={pm_id}")
+    _PDF_DIR.mkdir(parents=True, exist_ok=True)
 
     retriever = PaperRetriever(
-        email='test@mail.com',
+        email="test@mail.com",
         pmid=pm_id,
-        download_directory="PDF",
-        filename=f"{filename}.pdf",
-        allow_scihub=True
+        download_directory=str(_PDF_DIR),
+        filename=f"{_unique_stem()}.pdf",
+        allow_scihub=True,
     )
     download = retriever.download()
-    if download.is_downloaded:
-        return os.path.join(download.filepath, download.filename)
-    else:
-        log.warning(f"fetch_paper_by_pubmed_id - failed to download pmid {pm_id}")
-        return ""
+    path = _resolve_download_path(download)
+    if path is None:
+        log.warning(f"fetch_paper_by_pubmed_id: download failed for pmid={pm_id}")
+    return path
 
+
+# ── Data classes ──────────────────────────────────────────────────────────────
+
+@dataclass
+class ReferenceInfo:
+    identifier: str
+    name: str
+    authors: List[str]
+
+
+@tool
+def store_reference_information(referenceInfo: object) -> str:
+    """Store a document reference (identifier, name, authors) for inclusion in reports."""
+    references.append(referenceInfo)
+    return "Reference stored."
