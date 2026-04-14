@@ -52,11 +52,12 @@ def read_pdf(pmid:str = None, doi:str = None) -> str:
         if content:
             reader = PdfReader(content)
             for page in reader.pages:
-                text += page.extract_text()
-    except FileNotFoundError as fnf:
-        logging.error(f"File not found: ")
+                text += page.extract_text() or ""
+    except FileNotFoundError:
+        logging.error(f"PDF file not found at path: {content}")
+    except Exception as e:
+        logging.error(f"Error reading PDF at {content}: {e}")
     return text
-    return lorem.paragraph()
 
 @tool
 def summarize_research(text: str) -> str:
@@ -122,13 +123,14 @@ def summarize_research(text: str) -> str:
     return f"Wrote pdf file {filename}"
 
 #@tool
-def fetch_paper_by_doi(doi: str)->object:
+def fetch_paper_by_doi(doi: str) -> object:
     """Fetch paper using Digital Object ID (DOI)"""
-    print(f"fetch_paper_by_doi: doi = {doi}")
-    filename = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
-
-    if doi.startswith("None"):
+    doi = str(doi).strip().strip('"').strip("'")
+    if not doi or doi.lower() == "none":
+        log.error("fetch_paper_by_doi called with empty/None doi")
         return ""
+    log.info(f"fetch_paper_by_doi: doi = {doi}")
+    filename = f"{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}_{''.join(random.choices(string.ascii_uppercase + string.digits, k=8))}"
     retriever = PaperRetriever(
         email='test@mail.com',
         doi=doi,
@@ -161,27 +163,37 @@ def store_reference_information(referenceInfo: object):
     #     log.error(f"Key error in store_reference_information. Received: {referenceInfo}")
 
 #@tool
-def fetch_paper_by_pubmed_id(pmid: object)->object:
-    """Fetch paper using PubMed ID"""
-    json_str = json.loads(pmid)
-    try:
-        pm_id = json_str['pmid']
-    except KeyError:
-        log.error(f"Unable to get pmid: got {pmid}")
-        # perhaps agent has called me with a DOI?
+def fetch_paper_by_pubmed_id(pmid: object) -> object:
+    """Fetch paper using PubMed ID. Accepts a plain PMID string, or a JSON object with a 'pmid' or 'doi' key."""
+    pm_id = None
+
+    # Normalise: strip whitespace and quotes the agent sometimes wraps around values
+    raw = str(pmid).strip().strip('"').strip("'")
+
+    # Try JSON first (agent occasionally passes {"pmid": "..."})
+    if raw.startswith("{"):
         try:
-            doi = json_str['doi']
-            return fetch_paper_by_doi(doi)
-        except KeyError:
-            pass # hosed....
-    log.info(f"fetch_paper_by_pubmed_id: pmid = {pm_id}")
-    filename = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+            parsed = json.loads(raw)
+            pm_id = str(parsed.get("pmid", "")).strip() or None
+            if pm_id is None:
+                doi = str(parsed.get("doi", "")).strip() or None
+                if doi:
+                    return fetch_paper_by_doi(doi)
+        except (json.JSONDecodeError, AttributeError):
+            pass
 
-    timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-    filename = f"{timestamp}_{filename}"
+    # Fall back to treating the raw value as a plain PMID
+    if pm_id is None:
+        pm_id = raw
 
-    if pmid.startswith("None"):
+    if not pm_id or pm_id.lower() == "none":
+        log.error(f"fetch_paper_by_pubmed_id: could not resolve a PMID from input: {pmid!r}")
         return ""
+
+    log.info(f"fetch_paper_by_pubmed_id: pmid = {pm_id}")
+    timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+    filename = f"{timestamp}_{''.join(random.choices(string.ascii_uppercase + string.digits, k=8))}"
+
     retriever = PaperRetriever(
         email='test@mail.com',
         pmid=pm_id,
@@ -191,9 +203,8 @@ def fetch_paper_by_pubmed_id(pmid: object)->object:
     )
     download = retriever.download()
     if download.is_downloaded:
-        with open(download.filename, 'rb') as f:
-            contents = f.read()
-            return contents
+        return os.path.join(download.filepath, download.filename)
     else:
         log.warning(f"fetch_paper_by_pubmed_id - failed to download pmid {pm_id}")
+        return ""
 

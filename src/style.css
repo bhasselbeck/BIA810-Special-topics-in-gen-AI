@@ -105,6 +105,25 @@ button:focus-visible,
     color: #fff !important;
 }
 
+/* ── Hide sidebar collapse toggle & expander Material Icons arrows ───────── */
+[data-testid="collapsedControl"],
+button[kind="header"],
+[data-testid="stSidebarCollapseButton"] {
+    display: none !important;
+}
+/* Hide the keyboard_arrow_right / keyboard_double_arrow_left icon text
+   that Streamlit renders via the Material Icons ligature font */
+[data-testid="stExpander"] summary svg,
+[data-testid="stExpander"] details summary > span[data-testid="stExpanderToggleIcon"] {
+    display: none !important;
+}
+/* Broader catch for any Material Icons ligature leaking into the UI */
+.material-icons,
+.material-symbols-rounded {
+    font-size: 0 !important;
+    visibility: hidden !important;
+}
+
 /* ── Header / toolbar ───────────────────────────────────────────────────── */
 [data-testid="stHeader"],
 [data-testid="stToolbar"] {
@@ -334,6 +353,11 @@ div[data-testid="column"]:nth-child(2) .stButton > button:active {
     backdrop-filter: blur(10px);
 }
 [data-testid="stExpander"] summary { color: #a8d8f0 !important; font-size: 0.88rem !important; }
+[data-testid="stExpander"] [data-testid="stCaptionContainer"] p {
+    color: rgba(168,216,240,0.7) !important;
+    font-size: 0.8rem !important;
+    margin: 2px 0 !important;
+}
 
 /* ── Citations / safety ─────────────────────────────────────────────────── */
 .citation {
@@ -363,3 +387,11 @@ div[data-testid="column"]:nth-child(2) .stButton > button:active {
     padding: 10px 16px;
     backdrop-filter: blur(8px);
 }
+
+.stExpander summary span span[color="inherit"] {
+    display:none;
+}
+
+div.stButton button {
+    background-color: rgba(0,175,240,0.25);
+} 

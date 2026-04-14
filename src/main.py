@@ -35,7 +35,23 @@ def disclaimer():
     discussed with your physician.""")
 
 
-def _display_citations(citations: list[str]) -> None:
+def _check_status(model: str) -> dict:
+    """Ping Ollama to verify the selected model is reachable."""
+    import httpx
+    try:
+        r = httpx.get("http://localhost:11434/api/tags", timeout=2.0)
+        if r.status_code == 200:
+            available = [m["name"] for m in r.json().get("models", [])]
+            model_ok = any(m.startswith(model.split(":")[0]) for m in available)
+            return {
+                "online": True,
+                "model_ok": model_ok,
+                "label": "LLM Connected" if model_ok else "Model Not Loaded",
+                "sub": f"{model} ready" if model_ok else f"{model} not found in Ollama",
+            }
+    except Exception:
+        pass
+    return {"online": False, "model_ok": False, "label": "LLM Offline", "sub": "Cannot reach Ollama on localhost:11434"}
     if not citations:
         return
     st.markdown("### Sources & Citations")
@@ -115,12 +131,14 @@ with st.sidebar:
     st.session_state.max_pubmed_docs = max_pubmed_docs
     st.button("Disclaimer", on_click=disclaimer)
 
-    st.markdown("""
+    status = _check_status(model)
+    dot_color = "#00AFF0" if status["online"] and status["model_ok"] else "#f87171"
+    st.markdown(f"""
     <div class="status-badge">
-        <div class="status-dot"></div>
+        <div class="status-dot" style="background:{dot_color};"></div>
         <div>
-            <div class="status-text">System Online</div>
-            <div class="status-sub">BIA-810 Search Tool v2.1</div>
+            <div class="status-text">{status['label']}</div>
+            <div class="status-sub">{status['sub']}</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -143,19 +161,11 @@ with tab1:
         label_visibility="collapsed",
     )
 
-    col1, col2, col3 = st.columns([1, 1, 2])
+    col1, col2 = st.columns([1, 1])
     with col1:
         submit = st.button("Search", use_container_width=True)
     with col2:
         clear = st.button("Clear History", use_container_width=True)
-    with col3:
-        st.markdown("""
-        <div class="pill-row">
-            <div class="pill">PubMed</div>
-            <div class="pill">Evidence-Based</div>
-            <div class="pill">Real-time</div>
-        </div>
-        """, unsafe_allow_html=True)
 
     if clear:
         st.session_state.messages = []
@@ -182,9 +192,8 @@ with tab1:
         for msg in reversed(st.session_state.messages):
             preview = msg["question"][:70] + ("…" if len(msg["question"]) > 70 else "")
             with st.expander(f"Q: {preview}   —   {msg['timestamp']}"):
-                st.markdown(f"**Asked:** {msg['timestamp']}")
-                st.markdown(f"**Question:** {msg['question']}")
-                st.markdown('---')
+                st.caption(f"Asked: {msg['timestamp']}")
+                st.caption(f"Question: {msg['question']}")
                 _display_response(msg['response'])
 
 with tab2:
