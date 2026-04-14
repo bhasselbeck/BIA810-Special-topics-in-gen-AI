@@ -1,0 +1,365 @@
+/* ── Pfizer brand tokens ──────────────────────────────────────────────────
+   Deep Navy  #000485   Primary Blue  #0070BF
+   Cerulean   #00AFF0   Pacific Blue  #0093D0
+   Font: Noto Sans (Google Fonts)                                          */
+
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,300;0,400;0,600;0,700;0,800;1,400&display=swap');
+
+/* ── Keyframes ─────────────────────────────────────────────────────────── */
+@keyframes bgPan {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+@keyframes orbDrift {
+    0%,100% { transform: translate(0,0) scale(1); }
+    40%     { transform: translate(60px,-50px) scale(1.15); }
+    70%     { transform: translate(-40px, 30px) scale(0.92); }
+}
+@keyframes orbDrift2 {
+    0%,100% { transform: translate(0,0) scale(1); }
+    35%     { transform: translate(-70px, 40px) scale(1.1); }
+    65%     { transform: translate(50px,-35px) scale(0.95); }
+}
+@keyframes statusPulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(0,175,240,0.7); }
+    50%     { box-shadow: 0 0 0 6px rgba(0,175,240,0); }
+}
+
+/* ── Global font + base ─────────────────────────────────────────────────── */
+html, body, [data-testid="stAppViewContainer"],
+[data-testid="stAppViewContainer"] * {
+    font-family: 'Noto Sans', 'Segoe UI', sans-serif !important;
+}
+
+/* ── Animated background ────────────────────────────────────────────────── */
+html, body, [data-testid="stAppViewContainer"] {
+    background: linear-gradient(
+        135deg,
+        #000485 0%,
+        #003a8c 20%,
+        #0070BF 45%,
+        #00AFF0 65%,
+        #0093D0 80%,
+        #000485 100%
+    ) !important;
+    background-size: 300% 300% !important;
+    animation: bgPan 14s ease infinite !important;
+    color: #e8f4fd !important;
+}
+
+/* ── Floating orbs ──────────────────────────────────────────────────────── */
+[data-testid="stMain"]::before,
+[data-testid="stMain"]::after {
+    content: '';
+    position: fixed;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+    filter: blur(100px);
+}
+[data-testid="stMain"]::before {
+    width: 600px; height: 600px;
+    top: -150px; left: -150px;
+    background: radial-gradient(circle, rgba(0,4,133,0.75) 0%, transparent 65%);
+    animation: orbDrift 18s ease-in-out infinite;
+}
+[data-testid="stMain"]::after {
+    width: 500px; height: 500px;
+    bottom: -100px; right: -100px;
+    background: radial-gradient(circle, rgba(0,112,191,0.65) 0%, transparent 65%);
+    animation: orbDrift2 22s ease-in-out infinite;
+}
+[data-testid="stMain"] > * { position: relative; z-index: 1; }
+
+/* ── Kill Streamlit's default red/orange focus & hover accents ──────────── */
+*:focus,
+*:focus-visible,
+button:focus,
+button:focus-visible,
+[data-baseweb] *:focus,
+[data-baseweb] *:focus-visible {
+    outline: 2px solid #00AFF0 !important;
+    outline-offset: 2px !important;
+    box-shadow: none !important;
+}
+/* BaseWeb / Streamlit internal focus rings */
+[data-baseweb="input"]:focus-within,
+[data-baseweb="select"]:focus-within,
+[data-baseweb="textarea"]:focus-within {
+    border-color: #00AFF0 !important;
+    box-shadow: 0 0 0 3px rgba(0,175,240,0.2) !important;
+}
+/* Slider thumb & track */
+[data-testid="stSlider"] [role="slider"] {
+    background: #0070BF !important;
+    border-color: #00AFF0 !important;
+}
+[data-testid="stSlider"] [role="slider"]:focus {
+    box-shadow: 0 0 0 4px rgba(0,175,240,0.3) !important;
+}
+/* Selectbox hover/focus */
+[data-baseweb="select"] *:hover,
+[data-baseweb="select"] [aria-selected="true"] {
+    background-color: rgba(0,112,191,0.35) !important;
+    color: #fff !important;
+}
+
+/* ── Header / toolbar ───────────────────────────────────────────────────── */
+[data-testid="stHeader"],
+[data-testid="stToolbar"] {
+    background: transparent !important;
+}
+
+/* ── Sidebar ────────────────────────────────────────────────────────────── */
+[data-testid="stSidebar"] {
+    background: rgba(0, 4, 133, 0.88) !important;
+    backdrop-filter: blur(18px);
+    border-right: 1px solid rgba(0,175,240,0.25) !important;
+}
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] .stSlider label {
+    color: #a8d8f0 !important;
+    font-size: 0.82rem !important;
+}
+[data-testid="stSidebar"] .stSelectbox > div > div {
+    background: rgba(0,4,133,0.6) !important;
+    border: 1px solid rgba(0,175,240,0.3) !important;
+    color: #e8f4fd !important;
+    border-radius: 8px !important;
+}
+[data-testid="stSidebar"] .stSlider [data-testid="stTickBar"] { display: none; }
+
+.sidebar-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(0,175,240,0.7);
+    margin: 1.4rem 0 0.5rem 0;
+}
+
+/* Sidebar button (Disclaimer) */
+[data-testid="stSidebar"] .stButton > button {
+    background: rgb(0, 4, 133) !important;
+    border: 1px solid rgba(0,175,240,0.5) !important;
+    color: #e8f4fd !important;
+    border-radius: 8px !important;
+    font-size: 0.8rem !important;
+    font-weight: 600 !important;
+    width: 100%;
+    transition: background .2s, border-color .2s;
+}
+[data-testid="stSidebar"] .stButton > button:hover,
+[data-testid="stSidebar"] .stButton > button:focus,
+[data-testid="stSidebar"] .stButton > button:active {
+    background: #0070BF !important;
+    border-color: #00AFF0 !important;
+    color: #fff !important;
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+/* Status badge */
+.status-badge {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(0,4,133,0.5);
+    border: 1px solid rgba(0,175,240,0.3);
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-top: 2rem;
+}
+.status-dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: #00AFF0;
+    flex-shrink: 0;
+    animation: statusPulse 2s ease-in-out infinite;
+}
+.status-text { color: #e8f4fd; font-weight: 600; font-size: 0.85rem; }
+.status-sub  { color: rgba(168,216,240,0.6); font-size: 0.72rem; }
+
+/* ── Tabs ───────────────────────────────────────────────────────────────── */
+[data-testid="stTabs"] [data-baseweb="tab-list"] {
+    background: transparent !important;
+    border-bottom: 1px solid rgba(0,175,240,0.25);
+    gap: 4px;
+}
+[data-testid="stTabs"] [data-baseweb="tab"] {
+    background: transparent !important;
+    color: rgba(168,216,240,0.6) !important;
+    font-size: 0.88rem !important;
+    padding: 8px 20px !important;
+}
+[data-testid="stTabs"] [data-baseweb="tab"]:hover {
+    color: #fff !important;
+    background: transparent !important;
+}
+[data-testid="stTabs"] [aria-selected="true"] {
+    color: #fff !important;
+    border-bottom: 2px solid #00AFF0 !important;
+}
+
+/* ── Hero ───────────────────────────────────────────────────────────────── */
+.hero-title {
+    text-align: center;
+    font-size: 2.9rem;
+    font-weight: 800;
+    color: #fff;
+    margin: 1.8rem 0 0.3rem 0;
+    letter-spacing: -0.02em;
+    text-shadow: 0 2px 20px rgba(0,0,0,0.4);
+}
+.hero-title span { color: #00AFF0; }
+.hero-sub {
+    text-align: center;
+    color: rgba(168,216,240,0.8);
+    font-size: 0.93rem;
+    margin-bottom: 1.8rem;
+}
+.hero-sub b { color: #a8d8f0; }
+
+/* ── Search input ───────────────────────────────────────────────────────── */
+.stTextInput > div > div > input {
+    background: rgba(0,4,133,0.5) !important;
+    border: 1px solid rgba(0,175,240,0.4) !important;
+    border-radius: 12px !important;
+    color: #e8f4fd !important;
+    font-size: 1rem !important;
+    padding: 14px 18px !important;
+    backdrop-filter: blur(8px);
+    caret-color: #00AFF0;
+}
+.stTextInput > div > div > input::placeholder { color: rgba(168,216,240,0.45) !important; }
+.stTextInput > div > div > input:focus {
+    border-color: #00AFF0 !important;
+    box-shadow: 0 0 0 3px rgba(0,175,240,0.2) !important;
+    outline: none !important;
+}
+
+/* ── Main buttons (Search / Clear History) ──────────────────────────────── */
+/* Search — col 1 */
+div[data-testid="column"]:nth-child(1) .stButton > button {
+    background: rgb(0, 4, 133) !important;
+    border: 1px solid rgba(0,175,240,0.5) !important;
+    color: #fff !important;
+    border-radius: 10px !important;
+    font-weight: 700 !important;
+    font-size: 0.95rem !important;
+    padding: 10px 0 !important;
+    width: 100%;
+    box-shadow: 0 4px 18px rgba(0,4,133,0.6);
+    transition: background .2s, box-shadow .2s;
+}
+div[data-testid="column"]:nth-child(1) .stButton > button:hover,
+div[data-testid="column"]:nth-child(1) .stButton > button:focus,
+div[data-testid="column"]:nth-child(1) .stButton > button:active {
+    background: #0070BF !important;
+    border-color: #00AFF0 !important;
+    box-shadow: 0 6px 24px rgba(0,175,240,0.4) !important;
+    outline: none !important;
+}
+
+/* Clear History — col 2 */
+div[data-testid="column"]:nth-child(2) .stButton > button {
+    background: rgb(0, 4, 133) !important;
+    border: 1px solid rgba(0,175,240,0.4) !important;
+    color: #a8d8f0 !important;
+    border-radius: 10px !important;
+    font-size: 0.9rem !important;
+    font-weight: 600 !important;
+    padding: 10px 0 !important;
+    width: 100%;
+    transition: background .2s, border-color .2s;
+}
+div[data-testid="column"]:nth-child(2) .stButton > button:hover,
+div[data-testid="column"]:nth-child(2) .stButton > button:focus,
+div[data-testid="column"]:nth-child(2) .stButton > button:active {
+    background: #0070BF !important;
+    border-color: #00AFF0 !important;
+    color: #fff !important;
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+/* ── Feature pills ──────────────────────────────────────────────────────── */
+.pill-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1.4rem; }
+.pill {
+    background: rgba(0,4,133,0.5);
+    border: 1px solid rgba(0,175,240,0.3);
+    border-radius: 20px;
+    padding: 5px 14px;
+    font-size: 0.78rem;
+    color: #a8d8f0;
+    backdrop-filter: blur(6px);
+}
+
+/* ── Answer card ────────────────────────────────────────────────────────── */
+.answer-card {
+    background: rgba(0,4,133,0.45);
+    border: 1px solid rgba(0,175,240,0.3);
+    border-radius: 16px;
+    padding: 22px 26px;
+    margin-bottom: 1.4rem;
+    backdrop-filter: blur(14px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+.answer-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 14px;
+}
+.answer-title { font-size: 1.15rem; font-weight: 700; color: #fff; }
+.evidence-badge {
+    background: rgba(0,147,208,0.25);
+    border: 1px solid rgba(0,175,240,0.5);
+    color: #00AFF0;
+    border-radius: 20px;
+    padding: 3px 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.answer-body { color: #cce8f8; font-size: 0.93rem; line-height: 1.75; }
+
+/* ── History ────────────────────────────────────────────────────────────── */
+.history-header { margin: 1.8rem 0 0.8rem 0; }
+.history-title  { font-size: 1.1rem; font-weight: 700; color: #fff; }
+
+[data-testid="stExpander"] {
+    background: rgba(0,4,133,0.4) !important;
+    border: 1px solid rgba(0,175,240,0.25) !important;
+    border-radius: 12px !important;
+    margin-bottom: 8px !important;
+    backdrop-filter: blur(10px);
+}
+[data-testid="stExpander"] summary { color: #a8d8f0 !important; font-size: 0.88rem !important; }
+
+/* ── Citations / safety ─────────────────────────────────────────────────── */
+.citation {
+    background: rgba(0,0,0,0.25);
+    border-left: 3px solid #00AFF0;
+    padding: 8px 14px;
+    border-radius: 0 8px 8px 0;
+    margin-bottom: 6px;
+    font-size: 0.82rem;
+    color: #a8d8f0;
+}
+.safety-disclaimer {
+    background: rgba(248,151,29,0.12);
+    border: 1px solid rgba(248,151,29,0.4);
+    border-radius: 10px;
+    padding: 14px 18px;
+    color: #f8971d;
+    font-size: 0.85rem;
+    margin-top: 12px;
+}
+
+/* ── Metrics ────────────────────────────────────────────────────────────── */
+[data-testid="stMetric"] {
+    background: rgba(0,4,133,0.4);
+    border: 1px solid rgba(0,175,240,0.25);
+    border-radius: 10px;
+    padding: 10px 16px;
+    backdrop-filter: blur(8px);
+}
