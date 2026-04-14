@@ -9,8 +9,13 @@ import os
 import string
 import random
 from fpdf import FPDF
+import datetime
+import streamlit as st
+import json
 
 log = logging.getLogger(__name__)
+
+references = {}
 
 @tool
 def search_pubmed(query:str)->List[object]:
@@ -25,10 +30,9 @@ def search_pubmed(query:str)->List[object]:
             return content_dict
         else:
             return ["no data"]
-        # todo....
     else:
         logging.error("Failed to fetch query results from PubMed")
-        return "" # Do we need to do something better....
+        return ""
 
 
 @tool
@@ -57,14 +61,59 @@ def read_pdf(pmid:str = None, doi:str = None) -> str:
 @tool
 def summarize_research(text: str) -> str:
     """Summarize pharmaceutical research findings and output as a PDF file. The function takes text content that is
-     output into the pdf."""
+     output into the pdf, and the references are taken from the references global."""
     filename = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
-    filename = f"{filename}.pdf"
+    timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+    filename = f"{timestamp}_{filename}.pdf"
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", size=12)
-    pdf.write(text=text, h=7)
-#    pdf.cell(200, 10, txt=text, ln=True, align='C')
+    # Logo
+    pdf.image("../images/Pfizer_Logo.png", w=40, keep_aspect_ratio=True)
+    pdf.set_font("Times", size=12 )
+
+    # Question
+    if 'question' in st.session_state:
+        question = st.session_state.question
+    pdf.set_x(10)
+    pdf.set_font("Helvetica", style='B', size=16)
+    pdf.multi_cell(0, 10, align='L', text='Entered Question')
+    pdf.set_x(10)
+    pdf.set_font("Times", size=12)
+    pdf.multi_cell(0, 5, text=question)
+
+    # Discussion
+    pdf.set_x(10)
+    pdf.set_font("Helvetica", style='B', size=16)
+    pdf.multi_cell(0, 10, align='L', text='Discussion')
+    pdf.set_x(10)
+    pdf.set_font("Times", size=12)
+    pdf.multi_cell(0, 5, text=text)
+
+    # References
+    pdf.set_x(10)
+    pdf.set_font("Helvetica", style='B', size=16)
+    pdf.multi_cell(0, 10, align='L', text='References')
+    pdf.set_x(10)
+    pdf.set_font("Times", size=12)
+    references_text = ""
+    for reference in references:
+        references_text = (f"{references_text}\n,{reference.identifier} {reference.name}")
+    if references_text == "":
+        references_text = "References not listed out"
+    pdf.multi_cell(0, 5, text=references_text)
+
+    # Disclaimer
+    disclaimer = """This generated output is strictly for educational purposes only and it produces does not constitute medical advice nor should it be construed as viable scientific research. Always consult a qualified healthcare professional before starting, changing, or stopping any treatment. Homeopathic, supplemental and alternative therapies should be discussed with your physician."""
+    pdf.set_x(10)
+    pdf.set_font("Helvetica", style='B', size=16)
+    pdf.set_text_color(255,0,0)
+    pdf.multi_cell(0, 10, align='L', text='Important Disclaimer')
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_x(10)
+    pdf.set_font("Times", size=12)
+    pdf.multi_cell(0, 5, text=disclaimer)
+
+
     pdf.output(f"results/{filename}")
     return f"Wrote pdf file {filename}"
 
@@ -86,17 +135,40 @@ def fetch_paper_by_doi(doi: str)->object:
     download = retriever.download()
     return os.path.join(download.filepath, download.filename)
 
+from dataclasses import  dataclass
+@dataclass()
+class ReferenceInfo:
+    identifier: str
+    name: str
+    authors: List[str]
+
+@tool
+def store_reference_information(referenceInfo: ReferenceInfo):
+    """This function will store a document reference. The document reference will have an identifier and a document
+    name. The document reference will have a list of one or more authors."""
+    references[referenceInfo.identifier] = {
+        "identifier": referenceInfo.identifier,
+        "name": referenceInfo.name,
+        "authors": referenceInfo.authors
+    }
+
+
 #@tool
-def fetch_paper_by_pubmed_id(pmid: str)->object:
+def fetch_paper_by_pubmed_id(pmid: object)->object:
     """Fetch paper using PubMed ID"""
-    print(f"fetch_paper_by_pubmed_id: pmid = {pmid}")
+    json_str = json.loads(pmid)
+    pm_id = json_str['pmid']
+    log.info(f"fetch_paper_by_pubmed_id: pmid = {pm_id}")
     filename = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+
+    timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+    filename = f"{timestamp}_{filename}"
 
     if pmid.startswith("None"):
         return ""
     retriever = PaperRetriever(
         email='test@mail.com',
-        pmid=pmid,
+        pmid=pm_id,
         download_directory="PDF",
         filename=f"{filename}.pdf",
         allow_scihub=True
@@ -107,5 +179,5 @@ def fetch_paper_by_pubmed_id(pmid: str)->object:
             contents = f.read()
             return contents
     else:
-        log.warning(f"fetch_paper_by_pubmed_id - failed to download pmid {pmid}")
+        log.warning(f"fetch_paper_by_pubmed_id - failed to download pmid {pm_id}")
 

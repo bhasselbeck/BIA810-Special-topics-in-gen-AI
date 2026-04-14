@@ -2,6 +2,7 @@ import requests
 import xml.etree.ElementTree as ET
 from typing import List, Dict
 import logging
+import streamlit as st
 
 log = logging.getLogger(__name__)
 
@@ -11,8 +12,13 @@ def pubmed_search(query: str) -> str:
     url = base_url+"/esearch.fcgi"
     params = {
         'db': 'pubmed',
-        'term': query
+        'term': query,
+        'retmax': st.session_state.max_pubmed_docs
     }
+
+# If we want to limit number of results in query, param retmax:
+# Total number of UIDs from the retrieved set to be shown in the XML output (default=20). By default, ESearch only
+# includes the first 20 UIDs retrieved in the XML output. ref: https://www.ncbi.nlm.nih.gov/books/NBK25499/
 
     response = requests.get(url=url, params=params)
     if response.status_code == 200:

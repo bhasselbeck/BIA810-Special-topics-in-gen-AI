@@ -160,7 +160,8 @@ with tab1:
         st.rerun()
 
     if submit and question:
-        with st.spinner("Researching…"):
+        with st.spinner("Researching..."):
+            st.session_state.question = question
             try:
                 response = agent.invoke({"input": question})
                 st.session_state.messages.append({
@@ -181,8 +182,8 @@ with tab1:
             with st.expander(f"Q: {preview}   —   {msg['timestamp']}"):
                 st.markdown(f"**Asked:** {msg['timestamp']}")
                 st.markdown(f"**Question:** {msg['question']}")
-                st.markdown("---")
-                _display_response(msg["response"])
+                st.markdown('---')
+                _display_response(msg['response'])
 
 with tab2:
     st.markdown(f"### {app_title}")
