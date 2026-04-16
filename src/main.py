@@ -175,19 +175,36 @@ with tab1:
         st.rerun()
 
     if submit and question:
-        with st.spinner("Researching..."):
-            st.session_state.question = question
-            try:
-                response = agent.invoke({"input": question})
-                st.session_state.messages.append({
-                    "question": question,
-                    "response": response,
-                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                })
-                _display_response(response)
-            except Exception as e:
-                st.error(f"Error processing question: {str(e)}")
-                log.exception("Exception in asking question")
+        st.session_state.question = question
+        try:
+            with st.status("Starting research…", expanded=True) as status:
+                from agent import StatusCallbackHandler
+                import tools as _tools_module
+
+                # Kick off parallel PDF downloads immediately after search
+                # so they're ready by the time the agent calls read_pdf
+                def _on_search_done(pmids: list[str]):
+                    status.update(label="Pre-fetching papers in parallel…")
+                    _tools_module._prefetch_cache.update(
+                        _tools_module.prefetch_papers(pmids)
+                    )
+
+                _tools_module._on_search_done = _on_search_done
+
+                response = agent.invoke(
+                    {"input": question},
+                    config={"callbacks": [StatusCallbackHandler(status)]},
+                )
+                status.update(label="Research complete", state="complete", expanded=False)
+            st.session_state.messages.append({
+                "question": question,
+                "response": response,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            })
+            _display_response(response)
+        except Exception as e:
+            st.error(f"Error processing question: {str(e)}")
+            log.exception("Exception in asking question")
 
     if st.session_state.messages:
         st.markdown('<div class="history-header"><div class="history-title">Session History</div></div>',

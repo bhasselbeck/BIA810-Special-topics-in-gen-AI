@@ -1,6 +1,7 @@
 from langchain_classic.agents import AgentExecutor, create_react_agent
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import PromptTemplate
+from langchain_core.callbacks import BaseCallbackHandler
 import tools as _tools_module
 from tools import search_pubmed, read_pdf, summarize_research, store_reference_information
 
@@ -39,6 +40,38 @@ Question: {input}
 Thought:{agent_scratchpad}"""
 
 
+# Human-readable labels shown in the live status widget
+_TOOL_LABELS = {
+    "search_pubmed":              "Searching PubMed…",
+    "read_pdf":                   "Downloading & reading paper…",
+    "summarize_research":         "Writing report…",
+    "store_reference_information":"Storing reference…",
+}
+
+# Internal LangChain pseudo-tools that should never surface to the user
+_INTERNAL_TOOLS = {"_Exception", "_AgentAction", "_AgentFinish"}
+
+
+class StatusCallbackHandler(BaseCallbackHandler):
+    """Pushes live agent step updates into a Streamlit status container."""
+
+    def __init__(self, status):
+        self._status = status
+
+    def on_agent_action(self, action, **kwargs):
+        # Ignore internal LangChain error-recovery pseudo-tools
+        if action.tool.startswith("_"):
+            return
+        label = _TOOL_LABELS.get(action.tool, f"Running {action.tool}…")
+        self._status.update(label=label)
+
+    def on_tool_end(self, output, **kwargs):
+        pass  # status stays on the last action label until next step
+
+    def on_agent_finish(self, finish, **kwargs):
+        self._status.update(label="Finalising answer…", state="running")
+
+
 def create_agent(model: str, temperature: float = 0):
     llm = ChatOllama(model=model, temperature=temperature)
 
@@ -57,5 +90,5 @@ def create_agent(model: str, temperature: float = 0):
         verbose=True,
         handle_parsing_errors=True,
         max_iterations=8,
-        early_stopping_method="force",
+        early_stopping_method="generate",
     )

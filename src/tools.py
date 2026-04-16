@@ -14,6 +14,7 @@ from fpdf import FPDF
 from langchain_classic.tools import tool
 from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pubmed_utils import pubmed_search, get_pubmed_contents
 from pypdf import PdfReader
 from pypaperretriever import PaperRetriever
@@ -99,6 +100,24 @@ def _summarise_for_question(full_text: str, question: str) -> str:
 def search_pubmed(query: str) -> List[object]:
     """Search research papers related to a pharmaceutical query.
     Returns a dict keyed by PMID; each value contains title, PMID and DOI."""
+    results = _search_pubmed_cached(query)
+    # Trigger parallel prefetch of all returned PMIDs in the background
+    if isinstance(results, dict):
+        pmids = list(results.keys())
+        if pmids and callable(_on_search_done):
+            try:
+                _on_search_done(pmids)
+            except Exception as exc:
+                log.warning(f"prefetch trigger failed: {exc}")
+    return results
+
+
+_on_search_done = None  # injected by main.py after each search
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _search_pubmed_cached(query: str):
+    """Cached PubMed search — identical queries within 1 hour skip the API call."""
     results = pubmed_search(query)
     if results["status_code"] == 200:
         contents = get_pubmed_contents(results["indices"])
@@ -107,6 +126,34 @@ def search_pubmed(query: str) -> List[object]:
         return ["no data"]
     log.error("Failed to fetch query results from PubMed")
     return []
+
+
+def prefetch_papers(pmids: list[str]) -> dict[str, Path | None]:
+    """Download up to the first 2 papers in parallel with a polite delay.
+
+    Limiting concurrency avoids 429 rate-limit errors from Unpaywall/Crossref.
+    Only prefetches the top 2 results — the agent rarely reads more than that.
+    """
+    _PDF_DIR.mkdir(parents=True, exist_ok=True)
+
+    def _fetch(pmid: str):
+        import time
+        time.sleep(0.5)  # small stagger to avoid simultaneous API hits
+        return pmid, fetch_paper_by_pubmed_id(pmid)
+
+    results = {}
+    # Cap at 2 — no point downloading papers the agent won't reach
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = {pool.submit(_fetch, pmid): pmid for pmid in pmids[:2]}
+        for future in as_completed(futures):
+            pmid, path = future.result()
+            results[pmid] = path
+            log.info(f"prefetch_papers: {pmid} → {path}")
+    return results
+
+
+# Cache of pre-fetched paths so read_pdf can skip re-downloading
+_prefetch_cache: dict[str, Path | None] = {}
 
 
 @tool
@@ -123,7 +170,8 @@ def read_pdf(pmid: str = None, doi: str = None) -> str:
     if doi:
         pdf_path = fetch_paper_by_doi(doi)
     if pmid and pdf_path is None:
-        pdf_path = fetch_paper_by_pubmed_id(pmid)
+        # Check prefetch cache before downloading
+        pdf_path = _prefetch_cache.get(pmid) or fetch_paper_by_pubmed_id(pmid)
 
     if not pdf_path or not pdf_path.exists():
         return f"ERROR: Could not download PDF for pmid={pmid!r} doi={doi!r}. Do not summarise this paper."
