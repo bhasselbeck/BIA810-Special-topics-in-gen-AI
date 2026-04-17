@@ -181,8 +181,17 @@ with tab1:
                 from agent import StatusCallbackHandler
                 import tools as _tools_module
 
-                # Kick off parallel PDF downloads immediately after search
-                # so they're ready by the time the agent calls read_pdf
+                log_container = st.empty()
+                # Write an initial animated placeholder immediately so the box
+                # is never visually empty while the agent is warming up
+                log_container.markdown("""
+<div class="prog-line">
+    <span class="prog-icon">⚙️</span>
+    <span class="prog-text">Initializing agent <span class="prog-pulse"></span></span>
+    <div class="prog-detail">Loading model and preparing tools…</div>
+</div>
+""", unsafe_allow_html=True)
+
                 def _on_search_done(pmids: list[str]):
                     status.update(label="Pre-fetching papers in parallel…")
                     _tools_module._prefetch_cache.update(
@@ -193,7 +202,7 @@ with tab1:
 
                 response = agent.invoke(
                     {"input": question},
-                    config={"callbacks": [StatusCallbackHandler(status)]},
+                    config={"callbacks": [StatusCallbackHandler(status, log_container)]},
                 )
                 status.update(label="Research complete", state="complete", expanded=False)
             st.session_state.messages.append({

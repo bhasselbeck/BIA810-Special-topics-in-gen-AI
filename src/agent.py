@@ -42,10 +42,17 @@ Thought:{agent_scratchpad}"""
 
 # Human-readable labels shown in the live status widget
 _TOOL_LABELS = {
-    "search_pubmed":              "Searching PubMed…",
-    "read_pdf":                   "Downloading & reading paper…",
-    "summarize_research":         "Writing report…",
-    "store_reference_information":"Storing reference…",
+    "search_pubmed":               "Searching PubMed",
+    "read_pdf":                    "Downloading & reading paper",
+    "summarize_research":          "Writing report",
+    "store_reference_information": "Storing reference",
+}
+
+_TOOL_DETAIL = {
+    "search_pubmed":               "Querying PubMed E-utilities and retrieving article metadata…",
+    "read_pdf":                    "Fetching full-text PDF via open-access sources…",
+    "summarize_research":          "Generating structured PDF report…",
+    "store_reference_information": "Recording citation…",
 }
 
 # Internal LangChain pseudo-tools that should never surface to the user
@@ -53,23 +60,58 @@ _INTERNAL_TOOLS = {"_Exception", "_AgentAction", "_AgentFinish"}
 
 
 class StatusCallbackHandler(BaseCallbackHandler):
-    """Pushes live agent step updates into a Streamlit status container."""
+    """Writes live step-by-step progress into a Streamlit container."""
 
-    def __init__(self, status):
+    def __init__(self, status, log_container):
         self._status = status
+        self._log = log_container   # st.empty() or st.container() inside the status
+        self._lines: list[str] = []
+        self._step = 0
+
+    def _render(self):
+        html = "\n".join(self._lines)
+        self._log.markdown(html, unsafe_allow_html=True)
+
+    def _append(self, icon: str, text: str, detail: str = "", active: bool = False):
+        self._step += 1
+        pulse = ' <span class="prog-pulse"></span>' if active else ' <span class="prog-done">✓</span>'
+        line = (
+            f'<div class="prog-line">'
+            f'<span class="prog-icon">{icon}</span>'
+            f'<span class="prog-text">{text}{pulse}</span>'
+            + (f'<div class="prog-detail">{detail}</div>' if detail else "")
+            + "</div>"
+        )
+        self._lines.append(line)
+        self._render()
+    def _complete_last(self):
+        if self._lines:
+            # Replace the last active pulse with a done checkmark
+            self._lines[-1] = (
+                self._lines[-1]
+                .replace('<span class="prog-pulse"></span>', '<span class="prog-done">✓</span>')
+            )
+            self._render()
 
     def on_agent_action(self, action, **kwargs):
-        # Ignore internal LangChain error-recovery pseudo-tools
         if action.tool.startswith("_"):
             return
-        label = _TOOL_LABELS.get(action.tool, f"Running {action.tool}…")
-        self._status.update(label=label)
+        self._complete_last()
+        label  = _TOOL_LABELS.get(action.tool, action.tool)
+        detail = _TOOL_DETAIL.get(action.tool, "")
+        icons  = {"search_pubmed": "🔍", "read_pdf": "📄",
+                  "summarize_research": "📝", "store_reference_information": "🗂️"}
+        icon = icons.get(action.tool, "⚙️")
+        self._status.update(label=f"{label}…")
+        self._append(icon, label, detail, active=True)
 
     def on_tool_end(self, output, **kwargs):
-        pass  # status stays on the last action label until next step
+        self._complete_last()
 
     def on_agent_finish(self, finish, **kwargs):
-        self._status.update(label="Finalising answer…", state="running")
+        self._complete_last()
+        self._append("🧠", "Formulating answer", "Synthesising findings into a response…", active=True)
+        self._status.update(label="Formulating answer…", state="running")
 
 
 def create_agent(model: str, temperature: float = 0):

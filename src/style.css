@@ -399,3 +399,110 @@ div.stButton button {
 .st-emotion-cache-leahp2 {
     display: none;
 }
+
+/* ── Research progress log ──────────────────────────────────────────────── */
+@keyframes pulseOpacity {
+    0%,100% { opacity: 1; }
+    50%      { opacity: 0.25; }
+}
+
+.prog-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px;
+    padding: 6px 0;
+    font-size: 0.88rem;
+    padding-bottom:25px;
+}
+.prog-line:last-child { border-bottom: none; }
+
+.prog-icon { font-size: 1rem; flex-shrink: 0; }
+
+.prog-text {
+    color: #e8f4fd;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.prog-detail {
+    width: 100%;
+    padding-left: 1.6rem;
+    color: rgba(168,216,240,0.6);
+    font-size: 0.78rem;
+    font-weight: 400;
+}
+
+.prog-pulse {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #00AFF0;
+    animation: pulseOpacity 1s ease-in-out infinite;
+    box-shadow: 0 0 6px rgba(0,175,240,0.8);
+}
+
+.prog-done {
+    color: #4ade80;
+    font-size: 0.8rem;
+}
+
+/* Style the st.status container itself to match the theme */
+[data-testid="stStatusWidget"] {
+    background: rgba(0,4,133,0.5) !important;
+    border: 1px solid rgba(0,175,240,0.3) !important;
+    border-radius: 12px !important;
+    backdrop-filter: blur(12px);
+}
+
+/* Force the status body to stay open — Streamlit collapses it on update() */
+.stAppHeader .stAppToolbar [data-testid="stStatusWidget"] {
+    display:none;
+}
+
+[data-testid="stStatusWidget"] details {
+    display: block !important;
+}
+[data-testid="stStatusWidget"] details > div,
+[data-testid="stStatusWidget"] details > section {
+    display: block !important;
+    visibility: visible !important;
+    height: auto !important;
+    overflow: visible !important;
+}
+/* Hide the collapse toggle arrow so users can't fold it mid-run */
+[data-testid="stStatusWidget"] summary svg {
+    display: none !important;
+}
+
+[data-testid="stStatusWidget"] [data-testid="stStatusWidgetLabel"] {
+    color: #e8f4fd !important;
+    font-weight: 600 !important;
+    font-size: 0.9rem !important;
+}
+
+/* Animated shimmer bar that runs along the bottom of the status box */
+[data-testid="stStatusWidget"]::after {
+    content: '';
+    display: block;
+    height: 2px;
+    width: 100%;
+    margin-top: 10px;
+    border-radius: 2px;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        #00AFF0 40%,
+        #0070BF 60%,
+        transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
+}
+@keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
